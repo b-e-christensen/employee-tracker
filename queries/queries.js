@@ -1,97 +1,130 @@
 
 const db = require('../config/connection')
-const { addDepartmentPrompt, addEmployeePrompt } = require('./prompts')
+const { addDepartmentPrompt, addEmployeePrompt, addRolePrompt, chooseAction, updateEmployeeRolePrompt } = require('./prompts')
 
-function viewTable(table) {
-    db.query(`SELECT * FROM ${table}`, function(err, results) {
-    console.table(results);
-    })
+async function init () {
+    let action = await chooseAction()
+    actionPath(action)
   }
 
-async function addDepartment (answers) {
-    let results = await addDepartmentPrompt()
-    db.query(`INSERT INTO departments (name) VALUES (${results.department})`, function (err, results) {
-    console.log(results);
-    })
+function actionPath(param) {
+    switch (param.action) {
+      case 'View all departments':
+      viewTable('departments');
+      break;
+      case 'View all roles':
+      viewTable('roles');
+      break;
+      case 'View all employees':
+      viewTable('employees');
+      break;
+      case 'Add a department':
+      addDepartment();
+      break;
+      case 'Add an employee':
+      addEmployee();
+      break;
+      case 'Add a role':
+      addRole();
+      break;
+      case 'Update employee role':
+      updateEmployeeRole();
+      break;
+      case 'No further actions':
+      callItQuits();
+      break;
+    }
+  }
+
+async function viewTable(table) {
+    let results = await db.promise().query(`SELECT * FROM ${table}`)
+    console.log('\n')
+    console.table(results[0]);
+    console.log('\n')
+    await init()
+  }
+
+async function addDepartment () {
+    let answers = await addDepartmentPrompt()
+    await db.promise().query(`INSERT INTO departments (name) VALUES ('${answers.department}')`)
+    viewTable('departments')
 }
 
 async function addEmployee () {
     let roleArray = []
     let employeesArray= []
     await populateRolesArray(roleArray)
-    await populateEmployeesArray
-    await console.log(roleArray)
+    await populateEmployeesArray(employeesArray)
     let answers = await addEmployeePrompt(roleArray, employeesArray)
     let manager = await answers.manager
     let role = await answers.role
-
     let managerId
-    let roleId
 
-    if (manager === 'No one') {
-        managerId = 0
-    } else  {
-        db.query(`SELECT * FROM employees WHERE first_name = ? AND last_name = ?`, [manager.split(' ')[0], manager.split(' ')[1]], (err, results) => {
-            if (err) {
-                console.log(err)
-            }
-             managerId = results[0].id
-        })
+    if (manager == 'No one'){
+        managerId = null
+    } else {
+     managerId = await findId('employees', 'last_name', manager.split(' ')[1])
     }
+    let roleId = await findId('roles', 'title', role)
 
-    db.query(`SELECT * FROM roles WHERE title = ?`, role, (err, results) => {
-        if (err) {
-            console.log(err)
-        }
-        roleId = results[0].id
-    })
-
-    db.query(`INSERT INTO employees (first_name, last_name, role_id, manager_id) VALUES (${answers.firstName}, ${answers.lastName}, ${roleId}, ${managerId})`, function (err, results) {
-        console.log(results);
-        })
-
+    await db.promise().query(`INSERT INTO employees (first_name, last_name, role_id, manager_id)
+    VALUES ('${answers.firstName}', '${answers.lastName}', ${roleId}, ${managerId})`)
+    viewTable('employees')
 }
 
-function addRole (answers) {
-    let departmentId
+async function addRole () {
+    let departmentsArr = []
+    await populateDepartmentsArray(departmentsArr)
+    let answers = await addRolePrompt(departmentsArr)
+    let departmentId = await findId('departments', 'name', answers.department)
 
-    db.query(`SELECT * FROM departments WHERE name = ?`, answers.department, (err, results) => {
-        if (err) {
-            console.log(err)
-        }
-        departmentId = results[0].id
-    })
-
-    db.query(`INSERT INTO roles (title, salary, department_id) VALUES (${answers.title}, ${answers.salary}, ${departmentId})`, function (err, results2) {
-        console.log(results2);
-        })
-    
+    await db.promise().query(`INSERT INTO roles (title, salary, department_id) VALUES ('${answers.title}', ${answers.salary}, ${departmentId})`)
+    viewTable('roles')
 }
 
-function updateEmployeeRole() {
-    
+async function updateEmployeeRole() {
+    let employeesArr = []
+    let rolesArr = []
+
+    await populateEmployeesArray(employeesArr)
+    await populateRolesArray(rolesArr)
+
+    let answers = await updateEmployeeRolePrompt(employeesArr, rolesArr)
+    let roleId = await findId('roles', 'title', answers.role)
+    let employeeId = await db.promise().query(`SELECT id FROM employees WHERE first_name = '${answers.employee.split(' ')[0]}' AND last_name = '${answers.employee.split(' ')[1]}'`)
+
+    await db.promise().query(`UPDATE employees SET role_id = '${roleId}' WHERE id = '${employeeId[0][0].id}'`)
+    viewTable('employees')
 }
 
 function callItQuits() {
-    console.log('quit')
     process.exit()
 }
 
 async function populateRolesArray(arr) {
-    console.log('array should be populated')
-    let roles = await db.promise().query('SELECT title FROM roles')
-    roleObjArr = roles[0].forEach(element => arr.push(element.title))
+    let roles = await db.promise().query(`SELECT title FROM roles`)
+    roles[0].forEach(element => arr.push(element.title))
+}
+
+async function populateDepartmentsArray(arr) {
+    let roles = await db.promise().query(`SELECT name FROM departments`)
+    roles[0].forEach(element => arr.push(element.name))
+}
+
+async function populateEmployeesArray(arr) {
+    let employees = await db.promise().query('SELECT CONCAT(first_name,\' \',last_name) AS full_name FROM employees;')
+    employees[0].forEach(element => arr.push(element.full_name))
+}
+
+async function findId(table, column, value) {
+    let results = await db.promise().query(`SELECT id FROM ${table} WHERE ${column} = '${value}'`)
+    let returnedId = results[0][0].id
+    return returnedId
 }
 
 
 
-
 module.exports = {
-    viewTable,
-    addDepartment,
-    addEmployee,
-    addRole,
-    updateEmployeeRole,
-    callItQuits,
-    populateRolesArray
+    actionPath,
+    init
 }
