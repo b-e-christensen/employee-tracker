@@ -1,6 +1,6 @@
 # Employee Tracker &middot; [![GitHub license](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)   
    
-  Easily operate through a mysql database to keep track of employees, posotions and departments.  
+  Easily operate through a mysql database to keep track of employees, positions and departments.  
 
   https://user-images.githubusercontent.com/67548773/159810791-cde24233-c2d7-43f5-9d6f-19f091cf384a.mp4
      
